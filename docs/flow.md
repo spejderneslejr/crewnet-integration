@@ -46,17 +46,19 @@ end
 
 ### Continuous user creation
 
-As new users becomes available in CampOS they are created in CrewNet as well.
+As volunteers become active in CampOS they are created in CrewNet. The user is created with a synthetic email `<user_id>@crewnet.sl2026.dk` (where `user_id` is the CampOS user ID) that ties the account to CrewNet and is later used for user lookup during SSO (see [Single Sign-On](#single-sign-on)).
 
 ```mermaid
 sequenceDiagram
     participant campos as CampOS
     participant crewnet as CrewNet
 
-campos ->> campos: A user is given a CampOS function
-campos ->> crewnet: Query for users: GET /v1/users
+campos ->> campos: Detect volunteer becomes active (e.g. function assigned)
+campos ->> crewnet: Query for existing users: GET /v1/users
 crewnet -->> campos: Users
-campos ->> crewnet: Create user if missing: POST /v1/users
+campos ->> campos: Check if user with email <user_id>@crewnet.sl2026.dk already exists
+campos ->> crewnet: Create user if missing: POST /v1/users<br>{ email: "<user_id>@crewnet.sl2026.dk", ... }
+crewnet -->> campos: Created user
 campos ->> crewnet: Trigger availability synchronization for user
 
 ```
@@ -87,15 +89,18 @@ campos ->> crewnet: Create 1 availabiliy pr. day: POST /v1/users/(userid)/availa
 
 ## Single Sign on
 
-CrewNet uses CampOS as a Oauth provider to authenticate users. We have no authorization so all users are authorized as equal (non-admins). Users are assumed to exist prior to login
+CrewNet uses CampOS as an OAuth provider to authenticate users. There is no role-based authorization — all users are treated as equal (non-admins). Users must exist in CrewNet before they can log in (see [User creation](#user-creation)).
+
+CrewNet identifies users by looking them up via their CampOS user ID mapped to a `<id>@crewnet.sl2026.dk` email address.
 
 ### APIs
 
 * No CrewNet API endpoints are used
+* CampOS OAuth endpoints: `/oauth/authorize`, `/oauth/token`, `/oauth/userinfo`
 
-### Oauth flow
+### Oauth flow (outdated — superseded below)
 
-Simplified oauth flow:
+> **This diagram is outdated.** See the updated flow below.
 
 ```mermaid
 sequenceDiagram
@@ -114,6 +119,56 @@ crewnet ->> campos: Fetch user data using tokens
 campos -->> crewnet: Data
 crewnet -->> user: accept login
 user ->> crewnet: Starts using CrewNet
+```
+
+### Updated OAuth flow (current)
+
+Key changes from the old flow:
+- CrewNet requests the `crewnet` OAuth scope explicitly
+- After the token exchange, CrewNet calls the `/oauth/userinfo` endpoint
+- The userinfo response includes an `id` field (the CampOS user ID)
+- CrewNet resolves the local user by looking up email `<id>@crewnet.sl2026.dk`
+
+```mermaid
+sequenceDiagram
+    participant user as Volunteer
+    participant crewnet as CrewNet
+    participant campos as CampOS
+
+user ->> crewnet: Click "Login with CampOS"
+crewnet -->> user: Redirect to CampOS /oauth/authorize?scope=crewnet
+user ->> campos: Perform login
+campos ->> campos: Have the user log in
+campos -->> user: Redirect to CrewNet with authorization code
+user ->> crewnet: Pass authorization code
+crewnet ->> campos: Exchange code for tokens: POST /oauth/token
+campos -->> crewnet: access_token + refresh_token
+crewnet ->> campos: Fetch user info: GET /oauth/userinfo (Bearer access_token)
+campos -->> crewnet: { id: <user_id>, name, email, ... }
+crewnet ->> crewnet: Look up local user by email <user_id>@crewnet.sl2026.dk
+crewnet -->> user: Accept login
+user ->> crewnet: Starts using CrewNet
+```
+
+```bash
+# Step 1 — user visits this URL in their browser (redirect from CrewNet)
+GET https://<campos-domain>/oauth/authorize?response_type=code&client_id=<client_id>&redirect_uri=<redirect_uri>&scope=crewnet
+
+# Step 2 — CrewNet exchanges the authorization code for tokens
+curl -X POST https://<campos-domain>/oauth/token \
+  -H "Content-Type: application/x-www-form-urlencoded" \
+  -d "grant_type=authorization_code" \
+  -d "code=<authorization_code>" \
+  -d "client_id=<client_id>" \
+  -d "client_secret=<client_secret>" \
+  -d "redirect_uri=<redirect_uri>"
+# Response: { "access_token": "...", "refresh_token": "...", "token_type": "Bearer", ... }
+
+# Step 3 — CrewNet fetches userinfo to resolve the local user
+curl https://<campos-domain>/oauth/userinfo \
+  -H "Authorization: Bearer <access_token>"
+# Response: { "id": 12345, "name": "...", "email": "...", ... }
+# CrewNet then looks up the user by email: 12345@crewnet.sl2026.dk
 ```
 
 ## Workplace category (manual)
