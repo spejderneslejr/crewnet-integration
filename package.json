@@ -41,7 +41,7 @@
     "jimp": "^0.16.1",
     "luxon": "^2.4.0",
     "nest-commander": "^2.5.0",
-    "npm": "^8.12.1",
+    "npm": "^11.17.0",
     "pdf-lib": "^1.17.1",
     "read-excel-file": "^5.3.3",
     "reflect-metadata": "^0.1.13",
