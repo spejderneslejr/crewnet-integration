@@ -1,69 +1,85 @@
-import {
-  Controller,
-  Get,
-  HttpException,
-  HttpStatus,
-  InternalServerErrorException,
-  Logger,
-  NotAcceptableException,
-  ParseIntPipe,
-  Query,
-} from '@nestjs/common';
+import { Controller, Get, Post } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { CampCtlService } from '../campctl/campctl.service';
+import { CamposService } from 'src/integration/campos/campos.service';
+import { CrewnetService } from 'src/integration/crewnet/crewnet.service';
+import { CommandBus } from '@nestjs/cqrs';
+import { SynchronizeMembersCommand } from 'src/application/commands/sync/synchronize-members.command';
+import { SynchronizeWorkplacesCommand } from 'src/application/commands/sync/synchronize-workplaces.command';
+import { SynchronizeWorkplaceAssignmentCommand } from 'src/application/commands/sync/synchronize-workplace-assignment.command';
 
 @Controller()
 export class EndpointsController {
   dryRun: boolean;
   constructor(
-    private readonly logger: Logger,
-    private readonly campctl: CampCtlService,
-    private configService: ConfigService,
+    private readonly camposService: CamposService,
+    private readonly crewnet: CrewnetService,
+    private readonly commandBus: CommandBus,
+    configService: ConfigService,
   ) {
-    if (configService.get('server_dry_run') === 'true') {
+    if (configService.get('dry_run') === 'true') {
       this.dryRun = true;
     }
   }
 
-  /**
-   * Add a route to redirect users back to Drupal in login flow:
-   *
-   * 1. Drupal redirects to auth provider (B2C)
-   * 2. After login auth provider redirects here
-   * 3. based on state we find correct site and redirect to is.
-   */
-  @Get('/guesthelper')
-  async getCasRedirect(
-    @Query('partner', ParseIntPipe) partnerId: number,
-  ): Promise<{ crewnet_user: number }> {
-    this.logger.log('/guesthelper ping for ' + partnerId);
-    const syncData = await this.campctl.syncGuestHelpers(this.dryRun, [
-      partnerId,
-    ]);
+  @Get('/health')
+  async healthCheck(): Promise<any> {
+    // Check if we can connect to Campos and Crewnet
+    let camposHealth = 'ok';
+    let crewnetHealth = 'ok';
 
-    // Syncdata is an array of objects that describes synchronized users.
-    // The guesthelper endpoint runs with an include-list of 1, so we should just
-    // expect a single result, and that result should have created or existing
-    // true.
-
-    // To be on the safe side we filter and verify.
-    const singleResult = syncData.filter((syncResult) => {
-      return syncResult.campOSPartnerId === partnerId;
-    });
-
-    if (singleResult.length === 0) {
-      throw new NotAcceptableException(
-        'User not found',
-        'Could not find partner with id ' +
-          partnerId +
-          ' that was associated with a Udvalg and had name, email and phone-number',
-      );
-    } else if (!(singleResult[0].created || singleResult[0].existing)) {
-      throw new InternalServerErrorException(
-        'Unable to create',
-        'Could not create crewnet user for partner id ' + partnerId,
-      );
+    try {
+      await this.camposService.getAllActiveMembers();
+    } catch (error) {
+      camposHealth = 'error';
     }
-    return { crewnet_user: singleResult[0].crewnetUserId };
+
+    try {
+      await this.crewnet.getAllMembers();
+    } catch (error) {
+      crewnetHealth = 'error';
+    }
+
+    const result = {
+      isDryRun: this.dryRun,
+      campos: {
+        status: camposHealth,
+      },
+      crewnet: {
+        status: crewnetHealth,
+      },
+    };
+
+    return result;
+  }
+
+  @Post('/sync/members')
+  async synchronizeMembers(): Promise<void> {
+    await this.commandBus.execute(new SynchronizeMembersCommand(this.dryRun));
+  }
+
+  @Post('/sync/workplaces')
+  async synchronizeWorkplaces(): Promise<any> {
+    await this.commandBus.execute(
+      new SynchronizeWorkplacesCommand(this.dryRun),
+    );
+  }
+
+  @Post('/sync/workplace-assignments')
+  async synchronizeWorkplaceAssignments(): Promise<any> {
+    await this.commandBus.execute(
+      new SynchronizeWorkplaceAssignmentCommand(this.dryRun),
+    );
+  }
+
+  @Post('/sync/all')
+  async synchronizeAll(): Promise<any> {
+    await this.commandBus.execute(new SynchronizeMembersCommand(this.dryRun));
+
+    await this.commandBus.execute(
+      new SynchronizeWorkplacesCommand(this.dryRun),
+    );
+    await this.commandBus.execute(
+      new SynchronizeWorkplaceAssignmentCommand(this.dryRun),
+    );
   }
 }

@@ -30,20 +30,23 @@ npm run test -- --testPathPattern=<file>  # Single test file
 ## Environment
 
 Requires a `.env` file with:
+
 - `token` — CrewNet API bearer token
 - `event_id` — CrewNet event ID
 - `apidomain` — CrewNet API base URL
 - `duplicatedEmailUsers` — comma-separated list of user IDs allowed to share emails
-- `server_dry_run=true` — skip writes in server mode
+- `dry_run=true` — skip writes in server mode
 - `LOG_LEVEL=debug` — verbose logging
 
 ## Architecture
 
 ### Dual-mode entry points
+
 - `src/cli.ts` — bootstraps NestJS with `nest-commander` for CLI
 - `src/server.ts` — bootstraps HTTP server; cron jobs run automatically
 
 ### Core modules
+
 - **`src/crewnet/`** — REST client for CrewNet API (`CrewnetService`)
 - **`src/campos/`** — XMLRPC client for CampOS/Odoo (`CamposService`), includes country code mappings
 - **`src/campctl/`** — orchestration layer (`CampCtlService`) that composes CrewNet + CampOS operations into high-level sync flows
@@ -51,13 +54,15 @@ Requires a `.env` file with:
 - **`src/commands/`** — nest-commander CLI command handlers, one file per command group
 
 ### Scheduled tasks (server mode)
-| Task | Schedule |
-|------|----------|
-| `syncWorkplaceCategoriesAuto` | Every 10 min |
-| `syncGuestHelpers` | xx:03 and xx:33 |
-| `syncMemberContactInfo` | Once/hour at xx:20 |
+
+| Task                          | Schedule           |
+| ----------------------------- | ------------------ |
+| `syncWorkplaceCategoriesAuto` | Every 10 min       |
+| `syncGuestHelpers`            | xx:03 and xx:33    |
+| `syncMemberContactInfo`       | Once/hour at xx:20 |
 
 ### Key patterns
+
 - All API calls go through `CrewnetService` or `CamposService`; `CampCtlService` never calls external APIs directly.
 - Dry-run support is threaded through most write operations via `server_dry_run` env var.
 - Email deduplication: users sharing emails are tracked in `duplicatedEmailUsers`; `+` alias addresses are also handled explicitly.

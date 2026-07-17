@@ -1,6 +1,6 @@
-FROM node:16-alpine as builder
+FROM node:22-alpine AS builder
 
-ENV NODE_ENV build
+ENV NODE_ENV=build
 
 USER node
 WORKDIR /home/node
@@ -10,11 +10,11 @@ RUN npm ci
 
 COPY --chown=node:node . .
 RUN npm run build \
-    && npm prune --production
+    && npm prune --omit=dev
 
-FROM node:16-alpine
+FROM node:22-alpine
 
-ENV NODE_ENV production
+ENV NODE_ENV=production
 
 USER node
 WORKDIR /home/node

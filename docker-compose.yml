@@ -1,0 +1,13 @@
+services:
+  crewnet-integration:
+    container_name: crewnet-integration
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: crewnet-integration:0.0.1
+    env_file:
+      - .env
+    command: ["server"]
+    ports:
+      - "3000:3000"
+    restart: unless-stopped

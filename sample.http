@@ -1,0 +1,33 @@
+
+###
+
+
+GET http://localhost:3000/health HTTP/1.1
+
+
+###
+
+
+###
+
+POST http://localhost:3000/sync/members HTTP/1.1
+
+
+###
+
+
+POST http://localhost:3000/sync/workplaces HTTP/1.1
+
+
+###
+
+
+POST http://localhost:3000/sync/workplace-assignments HTTP/1.1
+
+
+
+###
+
+
+POST http://localhost:3000/sync/all HTTP/1.1
+

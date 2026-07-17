@@ -25,5 +25,6 @@
     "Truckcertifikat",
     "Workplans"
   ],
-  "rest-client.previewOption": "full"
+  "rest-client.previewOption": "full",
+  "editor.tabSize": 2
 }
